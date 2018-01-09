@@ -10,6 +10,7 @@ import { rollup, watch } from 'rollup';
 import nodent from 'rollup-plugin-nodent';
 import commonjs from 'rollup-plugin-commonjs';
 import nodeResolve from 'rollup-plugin-node-resolve';
+import babel from 'rollup-plugin-babel';
 import buble from 'rollup-plugin-buble';
 import uglify from 'rollup-plugin-uglify';
 import postcss from 'rollup-plugin-postcss';
@@ -86,7 +87,7 @@ export default async function microbundle(options) {
 	let steps = [];
 	for (let i=0; i<entries.length; i++) {
 		for (let j=0; j<formats.length; j++) {
-			steps.push(createConfig(options, entries[i], formats[j], i===0 && j===0));
+			steps.push(await createConfig(options, entries[i], formats[j], i===0 && j===0));
 		}
 	}
 
@@ -135,8 +136,8 @@ export default async function microbundle(options) {
 }
 
 
-function createConfig(options, entry, format, writeMeta) {
-	let { pkg } = options;
+async function createConfig(options, entry, format, writeMeta) {
+	let { pkg, cwd } = options;
 
 	let external = ['dns', 'fs', 'path', 'url'].concat(
 		Object.keys(pkg.peerDependencies || {}),
@@ -181,6 +182,8 @@ function createConfig(options, entry, format, writeMeta) {
 	let moduleMain = replaceName(pkg.module && !pkg.module.match(/src\//) ? pkg.module : pkg['jsnext:main'] || 'x.m.js', mainNoExtension);
 	let cjsMain = replaceName(pkg['cjs:main'] || 'x.js', mainNoExtension);
 	let umdMain = replaceName(pkg['umd:main'] || 'x.umd.js', mainNoExtension);
+
+	const useBabel = !!pkg.babel || await isFile(resolve(cwd, './.babelrc')) || await isFile(resolve(cwd, './.babelrc.js'));
 
 	// let rollupName = safeVariableName(basename(entry).replace(/\.js$/, ''));
 
@@ -231,7 +234,11 @@ function createConfig(options, entry, format, writeMeta) {
 						}
 					}
 				}),
-				!useTypescript && buble({
+				!useTypescript && useBabel && babel({
+					exclude: 'node_modules/**',
+					plugins: ['external-helpers']
+				}),
+				!useTypescript && !useBabel && buble({
 					exclude: 'node_modules/**',
 					jsx: options.jsx || 'h',
 					objectAssign: options.assign || 'Object.assign',
